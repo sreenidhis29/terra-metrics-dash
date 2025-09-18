@@ -1,4 +1,4 @@
-import { BarChart3, Home, MapPin, AlertTriangle, FileText, Settings } from "lucide-react";
+import { BarChart3, Home, MapPin, AlertTriangle, FileText } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -13,11 +13,10 @@ import {
 } from "@/components/ui/sidebar";
 
 const menuItems = [
-  { title: "Dashboard", url: "/", icon: Home, badge: null },
-  { title: "My Fields", url: "/fields", icon: MapPin, badge: null },
-  { title: "Alerts", url: "/alerts", icon: AlertTriangle, badge: 3 },
-  { title: "Reports", url: "/reports", icon: FileText, badge: null },
-  { title: "Settings", url: "/settings", icon: Settings, badge: null },
+  { title: "Dashboard", url: "/", icon: Home },
+  { title: "My Fields", url: "/fields", icon: MapPin },
+  { title: "Alerts", url: "/alerts", icon: AlertTriangle },
+  { title: "Reports", url: "/reports", icon: FileText },
 ];
 
 export function AppSidebar() {
@@ -39,7 +38,7 @@ export function AppSidebar() {
                     <NavLink 
                       to={item.url} 
                       className={({ isActive }) =>
-                        `flex items-center gap-3 transition-smooth relative ${
+                        `flex items-center gap-3 transition-smooth ${
                           isActive 
                             ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
                             : "hover:bg-sidebar-accent/50"
@@ -48,16 +47,6 @@ export function AppSidebar() {
                     >
                       <item.icon className="h-5 w-5" />
                       {!isCollapsed && <span>{item.title}</span>}
-                      {item.badge && !isCollapsed && (
-                        <span className="ml-auto bg-destructive text-destructive-foreground text-xs rounded-full px-2 py-1 min-w-[1.5rem] text-center">
-                          {item.badge}
-                        </span>
-                      )}
-                      {item.badge && isCollapsed && (
-                        <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                          {item.badge}
-                        </span>
-                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

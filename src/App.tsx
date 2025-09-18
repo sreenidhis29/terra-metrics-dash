@@ -5,10 +5,6 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
-import Fields from "./pages/Fields";
-import Alerts from "./pages/Alerts";
-import Reports from "./pages/Reports";
-import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import DashboardHeader from "./components/DashboardHeader";
 import { AppSidebar } from "./components/AppSidebar";
@@ -29,10 +25,6 @@ const App = () => (
               <main className="flex-1 overflow-auto">
                 <Routes>
                   <Route path="/" element={<Index />} />
-                  <Route path="/fields" element={<Fields />} />
-                  <Route path="/alerts" element={<Alerts />} />
-                  <Route path="/reports" element={<Reports />} />
-                  <Route path="/settings" element={<Settings />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>

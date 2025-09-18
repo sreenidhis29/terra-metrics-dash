@@ -11,20 +11,24 @@ const DashboardHeader = () => {
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <div className="flex items-center gap-3">
-          <img src={agriLogo} alt="AgriAI" className="h-8 w-8" />
-          <span className="text-xl font-semibold">AgriAI</span>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">PS</span>
+            </div>
+            <span className="text-xl font-semibold">Project Sentinel</span>
+          </div>
         </div>
       </div>
 
       <div className="flex items-center gap-4">
-        <Select defaultValue="north-field">
+        <Select defaultValue="north-farm-plot-a">
           <SelectTrigger className="w-48 bg-secondary">
             <SelectValue placeholder="Select Field" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="north-field">North Field (48.2 ha)</SelectItem>
-            <SelectItem value="south-field">South Field (32.1 ha)</SelectItem>
-            <SelectItem value="east-field">East Field (56.8 ha)</SelectItem>
+            <SelectItem value="north-farm-plot-a">📍 North Farm - Plot A</SelectItem>
+            <SelectItem value="south-field">📍 South Field (32.1 ha)</SelectItem>
+            <SelectItem value="east-field">📍 East Field (56.8 ha)</SelectItem>
           </SelectContent>
         </Select>
 

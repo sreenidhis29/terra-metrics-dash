@@ -3,7 +3,7 @@ Terra Metrics Dashboard Backend
 Agricultural AI Analytics API Server
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
@@ -11,9 +11,13 @@ import uvicorn
 from datetime import datetime, timedelta
 import random
 import numpy as np
+from sqlalchemy.orm import Session
 
 # Import inference module
 from inference import AgriculturalInference
+# Import satellite service and database models
+from satellite_service import satellite_service
+from models import get_db, NDVIResult
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -341,6 +345,239 @@ async def get_report(report_id: str):
         "download_url": f"/api/reports/{report_id}/download",
         "generated_at": datetime.now().isoformat(),
         "file_size": "2.4 MB"
+    }
+
+# Geocoding endpoints
+@app.get("/api/geocode")
+async def geocode_address(address: str):
+    """
+    Geocode an address to get coordinates
+    
+    Args:
+        address: Address string to geocode
+    
+    Returns:
+        Coordinates and formatted address
+    """
+    try:
+        # Using Nominatim (OpenStreetMap) for geocoding
+        import requests
+        
+        url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            'q': address,
+            'format': 'json',
+            'limit': 1,
+            'addressdetails': 1
+        }
+        headers = {
+            'User-Agent': 'TerraMetricsDashboard/1.0'
+        }
+        
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if not data:
+            raise HTTPException(status_code=404, detail="Address not found")
+        
+        result = data[0]
+        
+        return {
+            "address": result.get("display_name", address),
+            "latitude": float(result["lat"]),
+            "longitude": float(result["lon"]),
+            "bounding_box": result.get("boundingbox", []),
+            "place_id": result.get("place_id")
+        }
+        
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Geocoding service error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Geocoding failed: {str(e)}")
+
+@app.get("/api/reverse-geocode")
+async def reverse_geocode(lat: float, lon: float):
+    """
+    Reverse geocode coordinates to get address
+    
+    Args:
+        lat: Latitude
+        lon: Longitude
+    
+    Returns:
+        Formatted address
+    """
+    try:
+        import requests
+        
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {
+            'lat': lat,
+            'lon': lon,
+            'format': 'json',
+            'addressdetails': 1
+        }
+        headers = {
+            'User-Agent': 'TerraMetricsDashboard/1.0'
+        }
+        
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        return {
+            "address": data.get("display_name", "Unknown location"),
+            "latitude": lat,
+            "longitude": lon,
+            "place_id": data.get("place_id")
+        }
+        
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Reverse geocoding service error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Reverse geocoding failed: {str(e)}")
+
+# NDVI Analysis endpoints
+@app.get("/api/ndvi")
+async def get_ndvi_analysis(
+    min_lat: float,
+    min_lon: float, 
+    max_lat: float,
+    max_lon: float,
+    db: Session = Depends(get_db)
+):
+    """
+    Get NDVI analysis for a specified bounding box
+    
+    Args:
+        min_lat: Minimum latitude (south)
+        min_lon: Minimum longitude (west)
+        max_lat: Maximum latitude (north)
+        max_lon: Maximum longitude (east)
+    
+    Returns:
+        NDVI analysis results with base64-encoded image
+    """
+    try:
+        # Validate bounding box
+        if min_lat >= max_lat or min_lon >= max_lon:
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid bounding box: min values must be less than max values"
+            )
+        
+        # Check if coordinates are within valid ranges
+        if not (-90 <= min_lat <= 90) or not (-90 <= max_lat <= 90):
+            raise HTTPException(status_code=400, detail="Latitude must be between -90 and 90")
+        
+        if not (-180 <= min_lon <= 180) or not (-180 <= max_lon <= 180):
+            raise HTTPException(status_code=400, detail="Longitude must be between -180 and 180")
+        
+        # Create bounding box coordinates
+        bbox_coords = [min_lon, min_lat, max_lon, max_lat]
+        
+        # Fetch NDVI data
+        ndvi_array = satellite_service.fetch_ndvi_image(bbox_coords)
+        
+        # Convert to base64 PNG
+        ndvi_image_base64 = satellite_service.ndvi_to_png_base64(ndvi_array)
+        
+        # Calculate NDVI statistics
+        ndvi_stats = satellite_service.get_ndvi_statistics(ndvi_array)
+        
+        # Save to database
+        ndvi_result = NDVIResult(
+            min_lat=min_lat,
+            min_lon=min_lon,
+            max_lat=max_lat,
+            max_lon=max_lon,
+            image_base64=ndvi_image_base64,
+            ndvi_mean=ndvi_stats["mean"],
+            ndvi_min=ndvi_stats["min"],
+            ndvi_max=ndvi_stats["max"],
+            ndvi_std=ndvi_stats["std"],
+            valid_pixels=ndvi_stats["valid_pixels"],
+            total_pixels=ndvi_stats["total_pixels"]
+        )
+        
+        db.add(ndvi_result)
+        db.commit()
+        db.refresh(ndvi_result)
+        
+        return {
+            "id": ndvi_result.id,
+            "bounding_box": {
+                "min_lat": min_lat,
+                "min_lon": min_lon,
+                "max_lat": max_lat,
+                "max_lon": max_lon
+            },
+            "ndvi_image": ndvi_image_base64,
+            "statistics": ndvi_stats,
+            "created_at": ndvi_result.created_at.isoformat()
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"NDVI analysis failed: {str(e)}")
+
+@app.get("/api/ndvi/history")
+async def get_ndvi_history(db: Session = Depends(get_db), limit: int = 10):
+    """Get recent NDVI analysis history"""
+    results = db.query(NDVIResult).order_by(NDVIResult.created_at.desc()).limit(limit).all()
+    
+    return [
+        {
+            "id": result.id,
+            "bounding_box": {
+                "min_lat": result.min_lat,
+                "min_lon": result.min_lon,
+                "max_lat": result.max_lat,
+                "max_lon": result.max_lon
+            },
+            "statistics": {
+                "mean": result.ndvi_mean,
+                "min": result.ndvi_min,
+                "max": result.ndvi_max,
+                "std": result.ndvi_std,
+                "valid_pixels": result.valid_pixels,
+                "total_pixels": result.total_pixels
+            },
+            "created_at": result.created_at.isoformat()
+        }
+        for result in results
+    ]
+
+@app.get("/api/ndvi/{result_id}")
+async def get_ndvi_result(result_id: int, db: Session = Depends(get_db)):
+    """Get specific NDVI analysis result"""
+    result = db.query(NDVIResult).filter(NDVIResult.id == result_id).first()
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="NDVI result not found")
+    
+    return {
+        "id": result.id,
+        "bounding_box": {
+            "min_lat": result.min_lat,
+            "min_lon": result.min_lon,
+            "max_lat": result.max_lat,
+            "max_lon": result.max_lon
+        },
+        "ndvi_image": result.image_base64,
+        "statistics": {
+            "mean": result.ndvi_mean,
+            "min": result.ndvi_min,
+            "max": result.ndvi_max,
+            "std": result.ndvi_std,
+            "valid_pixels": result.valid_pixels,
+            "total_pixels": result.total_pixels
+        },
+        "created_at": result.created_at.isoformat()
     }
 
 if __name__ == "__main__":

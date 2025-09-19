@@ -1,9 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
+import { useLocation } from "@/contexts/LocationContext";
+import { useEffect, useState } from "react";
+import { MapPin } from "lucide-react";
 
-// Sample data for the trend chart
-const trendData = [
+// Default sample data for the trend chart
+const defaultTrendData = [
   { time: '00:00', soilMoisture: 65, temperature: 22, humidity: 68 },
   { time: '04:00', soilMoisture: 63, temperature: 20, humidity: 72 },
   { time: '08:00', soilMoisture: 68, temperature: 24, humidity: 65 },
@@ -30,11 +33,46 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const TrendsChart = () => {
+  const { selectedLocation, isLocationLoading } = useLocation();
+  const [trendData, setTrendData] = useState(defaultTrendData);
+
+  // Generate location-specific trend data
+  useEffect(() => {
+    if (selectedLocation) {
+      const generateLocationTrendData = () => {
+        const baseTemp = 20 + Math.random() * 15; // 20-35°C base
+        const baseMoisture = 30 + Math.random() * 50; // 30-80% base
+        const baseHumidity = 40 + Math.random() * 40; // 40-80% base
+
+        return [
+          { time: '00:00', soilMoisture: Math.round(baseMoisture + (Math.random() - 0.5) * 10), temperature: Math.round(baseTemp + (Math.random() - 0.5) * 8), humidity: Math.round(baseHumidity + (Math.random() - 0.5) * 10) },
+          { time: '04:00', soilMoisture: Math.round(baseMoisture + (Math.random() - 0.5) * 10), temperature: Math.round(baseTemp + (Math.random() - 0.5) * 8), humidity: Math.round(baseHumidity + (Math.random() - 0.5) * 10) },
+          { time: '08:00', soilMoisture: Math.round(baseMoisture + (Math.random() - 0.5) * 10), temperature: Math.round(baseTemp + (Math.random() - 0.5) * 8), humidity: Math.round(baseHumidity + (Math.random() - 0.5) * 10) },
+          { time: '12:00', soilMoisture: Math.round(baseMoisture + (Math.random() - 0.5) * 10), temperature: Math.round(baseTemp + (Math.random() - 0.5) * 8), humidity: Math.round(baseHumidity + (Math.random() - 0.5) * 10) },
+          { time: '16:00', soilMoisture: Math.round(baseMoisture + (Math.random() - 0.5) * 10), temperature: Math.round(baseTemp + (Math.random() - 0.5) * 8), humidity: Math.round(baseHumidity + (Math.random() - 0.5) * 10) },
+          { time: '20:00', soilMoisture: Math.round(baseMoisture + (Math.random() - 0.5) * 10), temperature: Math.round(baseTemp + (Math.random() - 0.5) * 8), humidity: Math.round(baseHumidity + (Math.random() - 0.5) * 10) },
+        ];
+      };
+
+      setTrendData(generateLocationTrendData());
+    } else {
+      setTrendData(defaultTrendData);
+    }
+  }, [selectedLocation]);
+
   return (
     <Card className="col-span-full card-gradient">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Temporal Trends</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>Temporal Trends</CardTitle>
+            {selectedLocation && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <MapPin className="h-3 w-3" />
+                <span className="truncate max-w-32">{selectedLocation.address.split(',')[0]}</span>
+              </div>
+            )}
+          </div>
           <Select defaultValue="soilMoisture">
             <SelectTrigger className="w-48 bg-secondary">
               <SelectValue placeholder="Select Metric" />
@@ -52,36 +90,36 @@ const TrendsChart = () => {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={trendData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis 
-                dataKey="time" 
+              <XAxis
+                dataKey="time"
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={12}
               />
-              <YAxis 
+              <YAxis
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={12}
               />
               <Tooltip content={<CustomTooltip />} />
-              <Line 
-                type="monotone" 
-                dataKey="soilMoisture" 
-                stroke="hsl(var(--primary))" 
+              <Line
+                type="monotone"
+                dataKey="soilMoisture"
+                stroke="hsl(var(--primary))"
                 strokeWidth={3}
                 dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 4 }}
                 activeDot={{ r: 6, stroke: "hsl(var(--primary))", strokeWidth: 2 }}
               />
-              <Line 
-                type="monotone" 
-                dataKey="temperature" 
-                stroke="hsl(var(--warning))" 
+              <Line
+                type="monotone"
+                dataKey="temperature"
+                stroke="hsl(var(--warning))"
                 strokeWidth={2}
                 strokeDasharray="5 5"
                 dot={false}
               />
-              <Line 
-                type="monotone" 
-                dataKey="humidity" 
-                stroke="hsl(var(--chart-2))" 
+              <Line
+                type="monotone"
+                dataKey="humidity"
+                stroke="hsl(var(--chart-2))"
                 strokeWidth={2}
                 strokeDasharray="3 3"
                 dot={false}
@@ -89,7 +127,7 @@ const TrendsChart = () => {
             </LineChart>
           </ResponsiveContainer>
         </div>
-        
+
         {/* Legend */}
         <div className="flex items-center justify-center gap-6 mt-4 text-sm">
           <div className="flex items-center gap-2">
@@ -105,6 +143,18 @@ const TrendsChart = () => {
             <span className="text-muted-foreground">Humidity</span>
           </div>
         </div>
+
+        {isLocationLoading && (
+          <div className="mt-4 text-xs text-muted-foreground animate-pulse text-center">
+            Loading trend data for location...
+          </div>
+        )}
+
+        {selectedLocation && (
+          <div className="mt-4 text-xs text-muted-foreground text-center">
+            Location-specific trend analysis
+          </div>
+        )}
       </CardContent>
     </Card>
   );

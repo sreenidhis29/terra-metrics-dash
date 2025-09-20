@@ -12,10 +12,11 @@ const DashboardHeader = () => {
         <SidebarTrigger />
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">PS</span>
-            </div>
-            <span className="text-xl font-semibold">Project Sentinel</span>
+            <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/60 rounded-lg flex items-center justify-center overflow-hidden">
+            <img src="public\favicon.ico" className="w-full h-full object-cover"/>
+          </div>
+
+            <span className="text-xl font-semibold">KRUSHI</span>
           </div>
         </div>
       </div>

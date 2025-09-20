@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from inference import AgriculturalInference
 # Import satellite service and database models
 from satellite_service import satellite_service
+from sentinel_hub_service import sentinel_hub_service
 from models import get_db, NDVIResult
 
 # Initialize FastAPI app
@@ -450,7 +451,7 @@ async def get_ndvi_analysis(
     db: Session = Depends(get_db)
 ):
     """
-    Get NDVI analysis for a specified bounding box
+    Get NDVI analysis for a specified bounding box using Sentinel Hub API
     
     Args:
         min_lat: Minimum latitude (south)
@@ -479,14 +480,8 @@ async def get_ndvi_analysis(
         # Create bounding box coordinates
         bbox_coords = [min_lon, min_lat, max_lon, max_lat]
         
-        # Fetch NDVI data
-        ndvi_array = satellite_service.fetch_ndvi_image(bbox_coords)
-        
-        # Convert to base64 PNG
-        ndvi_image_base64 = satellite_service.ndvi_to_png_base64(ndvi_array)
-        
-        # Calculate NDVI statistics
-        ndvi_stats = satellite_service.get_ndvi_statistics(ndvi_array)
+        # Fetch NDVI data using Sentinel Hub API
+        ndvi_data = sentinel_hub_service.fetch_ndvi_image(bbox_coords)
         
         # Save to database
         ndvi_result = NDVIResult(
@@ -494,13 +489,13 @@ async def get_ndvi_analysis(
             min_lon=min_lon,
             max_lat=max_lat,
             max_lon=max_lon,
-            image_base64=ndvi_image_base64,
-            ndvi_mean=ndvi_stats["mean"],
-            ndvi_min=ndvi_stats["min"],
-            ndvi_max=ndvi_stats["max"],
-            ndvi_std=ndvi_stats["std"],
-            valid_pixels=ndvi_stats["valid_pixels"],
-            total_pixels=ndvi_stats["total_pixels"]
+            image_base64=ndvi_data["ndvi_image"],
+            ndvi_mean=ndvi_data["statistics"]["mean"],
+            ndvi_min=ndvi_data["statistics"]["min"],
+            ndvi_max=ndvi_data["statistics"]["max"],
+            ndvi_std=ndvi_data["statistics"]["std"],
+            valid_pixels=ndvi_data["statistics"]["valid_pixels"],
+            total_pixels=ndvi_data["statistics"]["total_pixels"]
         )
         
         db.add(ndvi_result)
@@ -509,14 +504,9 @@ async def get_ndvi_analysis(
         
         return {
             "id": ndvi_result.id,
-            "bounding_box": {
-                "min_lat": min_lat,
-                "min_lon": min_lon,
-                "max_lat": max_lat,
-                "max_lon": max_lon
-            },
-            "ndvi_image": ndvi_image_base64,
-            "statistics": ndvi_stats,
+            "bounding_box": ndvi_data["bounding_box"],
+            "ndvi_image": ndvi_data["ndvi_image"],
+            "statistics": ndvi_data["statistics"],
             "created_at": ndvi_result.created_at.isoformat()
         }
         
@@ -579,6 +569,122 @@ async def get_ndvi_result(result_id: int, db: Session = Depends(get_db)):
         },
         "created_at": result.created_at.isoformat()
     }
+
+# Satellite Imagery endpoints
+@app.get("/api/satellite-image")
+async def get_satellite_image(
+    min_lat: float,
+    min_lon: float,
+    max_lat: float,
+    max_lon: float,
+    width: int = 512,
+    height: int = 512
+):
+    """
+    Get satellite imagery for a specified bounding box
+    
+    Args:
+        min_lat: Minimum latitude (south)
+        min_lon: Minimum longitude (west)
+        max_lat: Maximum latitude (north)
+        max_lon: Maximum longitude (east)
+        width: Image width in pixels (default: 512)
+        height: Image height in pixels (default: 512)
+    
+    Returns:
+        Satellite image data with base64-encoded image
+    """
+    try:
+        # Validate bounding box
+        if min_lat >= max_lat or min_lon >= max_lon:
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid bounding box: min values must be less than max values"
+            )
+        
+        # Check if coordinates are within valid ranges
+        if not (-90 <= min_lat <= 90) or not (-90 <= max_lat <= 90):
+            raise HTTPException(status_code=400, detail="Latitude must be between -90 and 90")
+        
+        if not (-180 <= min_lon <= 180) or not (-180 <= max_lon <= 180):
+            raise HTTPException(status_code=400, detail="Longitude must be between -180 and 180")
+        
+        # Create bounding box coordinates
+        bbox_coords = [min_lon, min_lat, max_lon, max_lat]
+        
+        # Fetch satellite image using Sentinel Hub API
+        image_data = sentinel_hub_service.fetch_satellite_image(bbox_coords, width, height)
+        
+        return {
+            "image_base64": image_data["image_base64"],
+            "width": image_data["width"],
+            "height": image_data["height"],
+            "bounding_box": {
+                "min_lat": min_lat,
+                "min_lon": min_lon,
+                "max_lat": max_lat,
+                "max_lon": max_lon
+            },
+            "timestamp": image_data["timestamp"]
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Satellite image fetch failed: {str(e)}")
+
+@app.get("/api/satellite/dates")
+async def get_available_dates(
+    min_lat: float,
+    min_lon: float,
+    max_lat: float,
+    max_lon: float,
+    start_date: str = None,
+    end_date: str = None
+):
+    """
+    Get available satellite imagery dates for a bounding box
+    
+    Args:
+        min_lat: Minimum latitude (south)
+        min_lon: Minimum longitude (west)
+        max_lat: Maximum latitude (north)
+        max_lon: Maximum longitude (east)
+        start_date: Start date in YYYY-MM-DD format (optional)
+        end_date: End date in YYYY-MM-DD format (optional)
+    
+    Returns:
+        List of available dates
+    """
+    try:
+        # Validate bounding box
+        if min_lat >= max_lat or min_lon >= max_lon:
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid bounding box: min values must be less than max values"
+            )
+        
+        # Create bounding box coordinates
+        bbox_coords = [min_lon, min_lat, max_lon, max_lat]
+        
+        # Get available dates
+        dates = sentinel_hub_service.get_available_dates(bbox_coords, start_date, end_date)
+        
+        return {
+            "bounding_box": {
+                "min_lat": min_lat,
+                "min_lon": min_lon,
+                "max_lat": max_lat,
+                "max_lon": max_lon
+            },
+            "available_dates": dates,
+            "count": len(dates)
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get available dates: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

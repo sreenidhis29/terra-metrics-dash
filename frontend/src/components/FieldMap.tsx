@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Search, MapPin, Layers, Download, RefreshCw } from "lucide-react";
+import { Search, MapPin, Layers, Download, RefreshCw, Plus, Save } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, ImageOverlay, LayerGroup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -94,15 +94,18 @@ const FieldMap = () => {
   const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number]>([40.7128, -74.0060]);
   const [mapZoom, setMapZoom] = useState(13);
+  const [showSaveField, setShowSaveField] = useState(false);
+  const [fieldName, setFieldName] = useState("");
+  const [isSavingField, setIsSavingField] = useState(false);
 
-  // Geocode address
+  // Geocode address using backend API
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
     setIsLocationLoading(true);
     try {
-      const response = await fetch(`/api/geocode?address=${encodeURIComponent(searchQuery)}`);
+      const response = await fetch(`http://localhost:8000/api/geocode?address=${encodeURIComponent(searchQuery)}`);
       if (!response.ok) throw new Error('Geocoding failed');
 
       const result: GeocodeResult = await response.json();
@@ -127,7 +130,7 @@ const FieldMap = () => {
     }
   }, [searchQuery, setSelectedLocation, setIsLocationLoading]);
 
-  // Fetch NDVI data
+  // Fetch NDVI data from backend API
   const fetchNDVIData = useCallback(async () => {
     if (!mapBounds) return;
 
@@ -136,7 +139,7 @@ const FieldMap = () => {
       const southWest = mapBounds.getSouthWest();
       const northEast = mapBounds.getNorthEast();
       const response = await fetch(
-        `/api/ndvi?min_lat=${southWest.lat}&min_lon=${southWest.lng}&max_lat=${northEast.lat}&max_lon=${northEast.lng}`
+        `http://localhost:8000/api/ndvi?min_lat=${southWest.lat}&min_lon=${southWest.lng}&max_lat=${northEast.lat}&max_lon=${northEast.lng}`
       );
 
       if (!response.ok) throw new Error('NDVI fetch failed');
@@ -165,6 +168,50 @@ const FieldMap = () => {
     }
   };
 
+  // Save location as field
+  const saveAsField = useCallback(async () => {
+    if (!selectedLocation || !fieldName.trim()) return;
+
+    setIsSavingField(true);
+    try {
+      const fieldData = {
+        field_id: `field_${Date.now()}`,
+        name: fieldName.trim(),
+        area: 0, // Will be calculated based on bounding box
+        location: {
+          lat: selectedLocation.latitude,
+          lng: selectedLocation.longitude
+        },
+        crop_type: "Unknown",
+        planting_date: new Date().toISOString().split('T')[0],
+        last_updated: new Date().toISOString()
+      };
+
+      const response = await fetch('http://localhost:8000/api/fields', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(fieldData)
+      });
+
+      if (!response.ok) throw new Error('Failed to save field');
+
+      // Reset form
+      setFieldName("");
+      setShowSaveField(false);
+
+      // Show success message (you could add a toast notification here)
+      alert(`Field "${fieldName}" saved successfully!`);
+
+    } catch (error) {
+      console.error('Error saving field:', error);
+      alert('Failed to save field. Please try again.');
+    } finally {
+      setIsSavingField(false);
+    }
+  }, [selectedLocation, fieldName]);
+
   return (
     <Card className="h-full min-h-[400px] overflow-hidden">
       <div className="relative h-full w-full">
@@ -172,7 +219,7 @@ const FieldMap = () => {
         <MapContainer
           center={mapCenter}
           zoom={mapZoom}
-          className="h-full w-full"
+          className="h-full w-full z-10 relative"
           zoomControl={true}
         >
           {/* Event handlers */}
@@ -219,7 +266,7 @@ const FieldMap = () => {
         </MapContainer>
 
         {/* Search overlay - Absolute position */}
-        <div className="absolute top-4 left-4 z-20 w-80">
+        <div className="absolute top-4 left-4 z-50 w-80 pointer-events-auto">
           <div className="bg-card/99 backdrop-blur-lg rounded-lg p-4 border border-border shadow-xl ring-1 ring-primary/30">
             <div className="flex gap-2 mb-3">
               <div className="relative flex-1">
@@ -243,7 +290,7 @@ const FieldMap = () => {
             </div>
 
             {selectedLocation && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm">
                   <MapPin className="h-4 w-4 text-primary" />
                   <span className="font-medium">Selected Location</span>
@@ -255,17 +302,66 @@ const FieldMap = () => {
                   <span>Lat: {selectedLocation.latitude.toFixed(4)}</span>
                   <span>Lng: {selectedLocation.longitude.toFixed(4)}</span>
                 </div>
+
+                {/* Save as Field Section */}
+                <div className="border-t pt-3">
+                  {!showSaveField ? (
+                    <Button
+                      onClick={() => setShowSaveField(true)}
+                      size="sm"
+                      className="w-full"
+                      variant="outline"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Save as Field
+                    </Button>
+                  ) : (
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Enter field name..."
+                        value={fieldName}
+                        onChange={(e) => setFieldName(e.target.value)}
+                        className="text-xs"
+                      />
+                      <div className="flex gap-1">
+                        <Button
+                          onClick={saveAsField}
+                          size="sm"
+                          className="flex-1"
+                          disabled={!fieldName.trim() || isSavingField}
+                        >
+                          {isSavingField ? (
+                            <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <Save className="h-3 w-3 mr-1" />
+                          )}
+                          Save
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setShowSaveField(false);
+                            setFieldName("");
+                          }}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
         </div>
 
         {/* Map controls - Absolute position */}
-        <div className="absolute top-4 right-4 z-20 space-y-2">
+        <div className="absolute top-4 right-4 z-50 space-y-2 pointer-events-auto">
           {/* NDVI Controls */}
           <div className="bg-card/99 backdrop-blur-lg rounded-lg p-3 border border-border shadow-xl ring-1 ring-primary/30">
             <div className="flex items-center justify-between mb-2">
-              <Label htmlFor="ndvi-toggle" className="text-sm font-medium flex items-center gap-2">
+              <Label htmlFor="ndvi-toggle" className="text-sm font-medium flex items-center gap-2 text-black">
                 <Layers className="h-4 w-4" />
                 NDVI Overlay
               </Label>
@@ -274,6 +370,7 @@ const FieldMap = () => {
                 checked={ndviEnabled}
                 onCheckedChange={toggleNDVI}
                 disabled={isLoadingNDVI}
+                className="scale-75"
               />
             </div>
 
@@ -281,22 +378,22 @@ const FieldMap = () => {
               {ndviEnabled && ndviData ? (
                 <>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Mean NDVI:</span>
+                    <span className="text-black">Mean NDVI:</span>
                     <Badge variant="secondary">
                       {ndviData.statistics.mean.toFixed(3)}
                     </Badge>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Range:</span>
-                    <span>{ndviData.statistics.min.toFixed(3)} - {ndviData.statistics.max.toFixed(3)}</span>
+                    <span className="text-black">Range:</span>
+                    <span className="text-black">{ndviData.statistics.min.toFixed(3)} - {ndviData.statistics.max.toFixed(3)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Valid Pixels:</span>
-                    <span>{ndviData.statistics.valid_pixels.toLocaleString()}</span>
+                    <span className="text-black">Valid Pixels:</span>
+                    <span className="text-black">{ndviData.statistics.valid_pixels.toLocaleString()}</span>
                   </div>
                 </>
               ) : (
-                <div className="text-center text-muted-foreground">
+                <div className="text-center text-black">
                   Toggle NDVI to see data
                 </div>
               )}
@@ -319,19 +416,19 @@ const FieldMap = () => {
 
           {/* Legend */}
           <div className="bg-card/99 backdrop-blur-lg rounded-lg p-3 border border-border shadow-xl ring-1 ring-primary/30">
-            <div className="text-xs font-medium mb-2 text-muted-foreground">NDVI Legend</div>
+            <div className="text-xs font-medium mb-2 text-black">NDVI Legend</div>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-red-500 rounded"></div>
-                <span className="text-xs">Low (-1 to 0)</span>
+                <span className="text-xs text-black">Low (-1 to 0)</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-                <span className="text-xs">Moderate (0 to 0.3)</span>
+                <span className="text-xs text-black">Moderate (0 to 0.3)</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-green-500 rounded"></div>
-                <span className="text-xs">High (0.3 to 1)</span>
+                <span className="text-xs text-black">High (0.3 to 1)</span>
               </div>
             </div>
           </div>
@@ -339,7 +436,7 @@ const FieldMap = () => {
 
         {/* Loading overlay - Absolute position */}
         {isLoadingNDVI && (
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-20">
+          <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-50">
             <div className="bg-card rounded-lg p-4 flex items-center gap-2 shadow-xl">
               <RefreshCw className="h-4 w-4 animate-spin" />
               <span className="text-sm">Loading NDVI data...</span>

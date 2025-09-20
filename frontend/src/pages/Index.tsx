@@ -3,6 +3,7 @@ import HealthSummaryCard from "../components/HealthSummaryCard";
 import AlertsCard from "../components/AlertsCard";
 import SensorDataCard from "../components/SensorDataCard";
 import TrendsChart from "../components/TrendsChart";
+import FieldManager from "../components/FieldManager";
 
 const Index = () => {
   return (
@@ -16,6 +17,7 @@ const Index = () => {
         
         {/* Right sidebar with key metrics */}
         <div className="space-y-4 xl:h-[500px] xl:overflow-y-auto">
+          <FieldManager />
           <HealthSummaryCard />
           <SensorDataCard />
         </div>

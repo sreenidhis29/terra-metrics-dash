@@ -1,47 +1,81 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Droplets, Thermometer, Bug } from "lucide-react";
-
-const alerts = [
-  {
-    id: 1,
-    type: "critical",
-    icon: AlertTriangle,
-    title: "Low soil moisture detected",
-    location: "Zone B-12",
-    time: "2 hours ago",
-    severity: "High"
-  },
-  {
-    id: 2,
-    type: "warning",
-    icon: Thermometer,
-    title: "Temperature stress warning",
-    location: "Zone A-8",
-    time: "4 hours ago",
-    severity: "Medium"
-  },
-  {
-    id: 3,
-    type: "info",
-    icon: Droplets,
-    title: "Irrigation scheduled",
-    location: "Zone C-3",
-    time: "6 hours ago",
-    severity: "Low"
-  },
-  {
-    id: 4,
-    type: "warning",
-    icon: Bug,
-    title: "Pest activity increase",
-    location: "Zone D-15",
-    time: "8 hours ago",
-    severity: "Medium"
-  }
-];
+import { useState, useEffect } from "react";
 
 const AlertsCard = () => {
+  const [alerts, setAlerts] = useState([
+    {
+      id: 1,
+      type: "critical",
+      icon: AlertTriangle,
+      title: "Low soil moisture detected",
+      location: "Zone B-12",
+      time: "2 hours ago",
+      severity: "High"
+    },
+    {
+      id: 2,
+      type: "warning",
+      icon: Thermometer,
+      title: "Temperature stress warning",
+      location: "Zone A-8",
+      time: "4 hours ago",
+      severity: "Medium"
+    },
+    {
+      id: 3,
+      type: "info",
+      icon: Droplets,
+      title: "Irrigation scheduled",
+      location: "Zone C-3",
+      time: "6 hours ago",
+      severity: "Low"
+    },
+    {
+      id: 4,
+      type: "warning",
+      icon: Bug,
+      title: "Pest activity increase",
+      location: "Zone D-15",
+      time: "8 hours ago",
+      severity: "Medium"
+    }
+  ]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch alerts from backend
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/alerts');
+        if (response.ok) {
+          const data = await response.json();
+          // Transform backend data to match frontend format
+          const transformedAlerts = data.map((alert: any, index: number) => ({
+            id: alert.id || index + 1,
+            type: alert.severity?.toLowerCase() === 'high' ? 'critical' : 
+                  alert.severity?.toLowerCase() === 'medium' ? 'warning' : 'info',
+            icon: alert.type?.includes('Pest') ? Bug :
+                  alert.type?.includes('Temperature') ? Thermometer :
+                  alert.type?.includes('Water') ? Droplets : AlertTriangle,
+            title: alert.description || alert.type,
+            location: alert.zone || 'Unknown Zone',
+            time: new Date(alert.detected).toLocaleString(),
+            severity: alert.severity || 'Low'
+          }));
+          setAlerts(transformedAlerts);
+        }
+      } catch (error) {
+        console.error('Error fetching alerts:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAlerts();
+  }, []);
+
   const getSeverityColor = (severity: string) => {
     switch (severity.toLowerCase()) {
       case "high":
@@ -79,7 +113,12 @@ const AlertsCard = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {alerts.map((alert) => (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+          </div>
+        ) : (
+          alerts.map((alert) => (
           <div
             key={alert.id}
             className="flex items-start gap-3 p-3 rounded-lg bg-accent/50 hover:bg-accent/70 transition-smooth"
@@ -96,7 +135,8 @@ const AlertsCard = () => {
               <p className="text-xs text-muted-foreground">{alert.time}</p>
             </div>
           </div>
-        ))}
+          ))
+        )}
       </CardContent>
     </Card>
   );
